@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.IBinder;
 import android.os.PowerManager;
+import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -14,22 +15,32 @@ import com.pubnub.api.PubnubException;
 import com.vij.devicectrl.Operations.Controller;
 import com.vij.devicectrl.Receivers.DataReceiver;
 import com.vij.devicectrl.Utilities.AccessKeys;
+import com.vij.devicectrl.Utilities.Config;
+import com.vij.devicectrl.Utilities.NotificationUtils;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 public class ControllerService extends Service implements AccessKeys {
+
+    private String TAG = ControllerService.class.getSimpleName();
 
     private String channel = KEY_CHANNEL;
     private Pubnub pubnub = new Pubnub(KEY_PUB, KEY_SUB, false);
     private PowerManager.WakeLock wl = null;
 
-    private Controller mController;
+    private Context mContext;
 
     private void notifyUser(Object message) {
 
         try {
+
             final String obj = (String) message;
             Log.i("Received msg : ", obj.toString());
 
-            mController.BlueTooth(obj.toString());
+            Intent resultIntent = new Intent(getApplicationContext(), ControllerService.class);
+            resultIntent.putExtra("message", obj);
+            showNotificationMessage(obj, resultIntent);
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -39,16 +50,15 @@ public class ControllerService extends Service implements AccessKeys {
     public void onCreate() {
         super.onCreate();
 
+        mContext = this;
+
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SubscribeAtBoot");
 
         if (wl != null) {
             wl.acquire();
             Log.i("PUBNUB", "Partial Wake Lock : " + wl.isHeld());
-//            Toast.makeText(this, "Partial Wake Lock : " + wl.isHeld(), Toast.LENGTH_LONG).show();
         }
-
-        mController = new Controller(this);
 
         Log.i("PUBNUB", "ControllerService created...");
 
@@ -114,4 +124,33 @@ public class ControllerService extends Service implements AccessKeys {
         super.onTaskRemoved(rootIntent);
     }
 
+    private void showNotificationMessage(String _data, Intent intent) {
+
+        NotificationUtils notificationUtils = new NotificationUtils(mContext);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+
+        try {
+
+            JSONObject data = new JSONObject(_data).getJSONObject("data");
+
+            String title = data.getString("title");
+            String message = data.getString("message");
+            String imageUrl = data.getString("image");
+            String timestamp = data.getString("timestamp");
+
+            Log.e(TAG, "title: " + title);
+            Log.e(TAG, "message: " + message);
+            Log.e(TAG, "imageUrl: " + imageUrl);
+            Log.e(TAG, "timestamp: " + timestamp);
+
+            if (imageUrl.toString().length() != 0) {
+                notificationUtils.showNotificationMessage(title, message, timestamp, intent, imageUrl);
+            } else {
+                notificationUtils.showNotificationMessage(title, message, timestamp, intent);
+            }
+
+        } catch (JSONException ex) {
+            Log.e(TAG, ex.getMessage().toString());
+        }
+    }
 }
